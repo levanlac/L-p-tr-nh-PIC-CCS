@@ -9,7 +9,6 @@
 #FUSES NOWDT, HS, NOPUT, NOPROTECT, NODEBUG, NOBROWNOUT, NOLVP, NOCPD, NOWRT
 #use delay(clock=20000000)
 
-
 //lcear
 #define LCD_CLEAR 0x01
 //cursor home
@@ -20,23 +19,32 @@
 #define LCD_DISPLAY_ON_OFF_CONTROL 0x0F
 //cursor or display shift
 #define LCD_CURSOR_DISPLAY_SHIFT 0x14
-//function set
-#define LCD_FUNCTION_SET 0x38
-//set CGRAM address
 
 
 #bit RS =0x07.0
 #bit RW =0x07.1
 #bit EN =0x07.2
 
-#bit LCD_D0=0x06.0
-#bit LCD_D1=0x06.1
-#bit LCD_D2=0x06.2
-#bit LCD_D3=0x06.3
-#bit LCD_D4=0x06.4
-#bit LCD_D5=0x06.5
-#bit LCD_D6=0x06.6
-#bit LCD_D7=0x06.7
+#define LCD8BIT 0
+#if LCD8BIT
+   //function set
+   #define LCD_FUNCTION_SET 0x38
+   #bit LCD_D0=0x06.0
+   #bit LCD_D1=0x06.1
+   #bit LCD_D2=0x06.2
+   #bit LCD_D3=0x06.3
+   #bit LCD_D4=0x06.4
+   #bit LCD_D5=0x06.5
+   #bit LCD_D6=0x06.6
+   #bit LCD_D7=0x06.7
+#else
+   //function set
+   #define LCD_FUNCTION_SET 0x28
+   #bit LCD_D4=0x06.4
+   #bit LCD_D5=0x06.5
+   #bit LCD_D6=0x06.6
+   #bit LCD_D7=0x06.7
+#endif
 
 #byte LCD_DATA =0x06
 #byte LCD_TRIS_DATA=0x86
@@ -52,82 +60,126 @@
 #bit LCD_TRIS_RW=0x87.1
 #bit LCD_TRIS_EN=0x87.2
 
-
-
-
 //
 void lcd_wait(){
-   delay_us(50);
-}
-void lcd_send_byte(char d){
-   RW=0;
-   EN=1;
+   LCD_D7=1;
+   LCD_TRIS_D7=1;
    
-   LCD_DATA=d;
-   while(EN!=1);
-   EN=0;
+   EN=1;
+   RS=0;
+   RW=1;
+   
+   while(LCD_D7) EN=0;
+   LCD_TRIS_D7=0;
+   //delay_us(50);
+}
+void lcd_send_byte(int8 d){
+   RW=0;
+   #if LCD8BIT
+      //lcd_wait();
+      EN=1;  
+      LCD_D0=bit_test(d,0);
+      LCD_D1=bit_test(d,1);
+      LCD_D2=bit_test(d,2);
+      LCD_D3=bit_test(d,3);
+      LCD_D4=bit_test(d,4);
+      LCD_D5=bit_test(d,5);
+      LCD_D6=bit_test(d,6);
+      LCD_D7=bit_test(d,7);
+      while(EN!=1);
+      EN=0;
+   #else
+      EN=1;
+      //LCD_DATA=d;
+      LCD_D4=bit_test(d,4);
+      LCD_D5=bit_test(d,5);
+      LCD_D6=bit_test(d,6);
+      LCD_D7=bit_test(d,7);
+      delay_us(50);
+      while(EN!=1);
+      EN=0;
+      delay_us(50);
+      
+      EN=1;  
+      LCD_D4=bit_test(d,0);
+      LCD_D5=bit_test(d,1);
+      LCD_D6=bit_test(d,2);
+      LCD_D7=bit_test(d,3);
+      while(EN!=1);
+      EN=0;
+ 
+   #endif
+
 }
 
 void lcd_cmd(int8 cmd){
+   delay_us(400);
    RS=0;
-//!   RW=0;
-//!   EN=1;
-//!   
-//!   LCD_DATA=cmd;
-//!   while(EN!=1);
-//!   EN=0;
    lcd_send_byte(cmd);
-   
-   lcd_wait();
 }
-
-
-
-
 
 void lcd_gotoXY(int8 y, int8 x){
-   
-   lcd_cmd(0x87);
-   delay_ms(1);
+   y=(y<2) ? 0x80:0xC0;
+   x=(x<1 || x>16) ? 0x00:(x-1);
+   lcd_cmd(x|y);
+   delay_us(50);
 }
-void lcd_init(){
-   
-   //set tris
-   LCD_TRIS_RS=0;
-   LCD_TRIS_RW=0;
-   LCD_TRIS_EN=0;
-   LCD_TRIS_DATA=0x00;
-   delay_ms(10);
-   
-   //cmd  
-   lcd_cmd(LCD_FUNCTION_SET);
-   delay_ms(10);
-   lcd_cmd(LCD_CLEAR);
-   delay_ms(10);
-   lcd_cmd(LCD_DISPLAY_ON_OFF_CONTROL);
-   delay_ms(10);
-   lcd_cmd(LCD_ENTRY_MODE_SET);
-   delay_ms(10);
-}
+
+
 void lcd_putc(int8 c){
+   delay_us(400);
    RS=1;
-   RW=0;
-   EN=1;
-   LCD_DATA=c;
-   while(!EN);
-   EN=0;
-   delay_us(500);
+
+   lcd_send_byte(c);
+
+   delay_us(50);
 }
-void lcd_getc(char c[]){
+void lcd_putStr(char c[]){
    int8 i=0;
    while(c[i]){
       lcd_putc(c[i]);
       i++;
    }
 }
-void lcd_puts(){}
-void lcd_clr(){}
+void lcd_clr(){
+   lcd_cmd(LCD_CLEAR);
+   delay_us(1700);
+}
 
+void lcd_init(){
+   
+   //set tris
+   LCD_TRIS_RS=0;
+   LCD_TRIS_RW=0;
+   LCD_TRIS_EN=0;
+   #if lCD8BIT
+      LCD_TRIS_DATA=0x00;
+      delay_ms(10);
+   #else
+      LCD_TRIS_D4=0;
+      LCD_TRIS_D5=0;
+      LCD_TRIS_D6=0;
+      LCD_TRIS_D7=0;
+      delay_ms(10);
+      lcd_cmd(0x02);
+      delay_us(50);
+   #endif
+   
+   
+   
+   
+   //cmd     
+   lcd_cmd(LCD_FUNCTION_SET);
+   delay_us(50);
+   lcd_cmd(LCD_CLEAR);
+   delay_us(1700);
+   lcd_cmd(LCD_DISPLAY_ON_OFF_CONTROL);
+   delay_us(50);
+   lcd_cmd(LCD_ENTRY_MODE_SET);
+   delay_us(50);
+   lcd_cmd(0x0C);
+   delay_us(50);
+}
 
 //
 int main (void)
@@ -136,9 +188,10 @@ int main (void)
    lcd_init();
    lcd_putc('s');
    char str[20]="nhamsdfdxbfgnghmjb,kl,.lnj,.jk";
-   lcd_cmd(0xC3);
-   lcd_getc(str);
-   //lcd_putc('s');
+   //lcd_cmd(0xC3);
+   lcd_gotoXY(2,1);
+   lcd_putStr(str);
+   lcd_putc('s');
    //lcd_putc('s');
  
    while (1)
